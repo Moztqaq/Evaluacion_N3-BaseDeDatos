@@ -6,7 +6,7 @@ const bcrypt = require('bcrypt');
 
 // Iniciar la aplicación express holaaaaaaaa
 const aplicacion = express();
-const puerto = 3000;
+const puerto = process.env.PORT || 3000;
 
 // Instanciar las clases necesarias en nuestra aplicación
 aplicacion.use(cors());
@@ -17,7 +17,6 @@ mongoose.connect('mongodb://localhost:27017/AP_N3_C1')
     .then(() => console.log('Conexión Exitosa!'))
     .catch((excepcion) => console.log('No ha sido posible conectarse por el siguiente error: ', excepcion));
 
-const puerto = process.env.PORT || 3000;
 aplicacion.listen(puerto, () => console.log(`Corriendo en el puerto ${puerto}`));
 
 // ==========================================
@@ -120,7 +119,7 @@ aplicacion.post('/guardarUsuario', async (request, response) => {
             fechaNacimiento, 
             nacionalidad, 
             genero, 
-            direccion, // objeto con: comuna, calle, numero, departamento
+            direccion, 
             contrasena 
         } = request.body;
 
@@ -131,7 +130,7 @@ aplicacion.post('/guardarUsuario', async (request, response) => {
             });
         }
 
-        // Encriptar la contraseña con Bcrypt 
+        // Encriptar la contraseña con Bcrypt (Requerimiento de Seguridad)
         const saltRounds = 10;
         const contrasenaEncriptada = await bcrypt.hash(contrasena, saltRounds);
 
@@ -142,13 +141,13 @@ aplicacion.post('/guardarUsuario', async (request, response) => {
             correo,
             telefono,
             fechaNacimiento,
-            nacionalidad, // Código ISO-3166 Alpha-2 (Ej: "CL", "AR")
+            nacionalidad,
             genero,
             direccion,
             contrasena: contrasenaEncriptada
         });
 
-        
+        // Guardar en la base de datos
         await nuevoUsuario.save();
         
         response.status(200).json({ 
@@ -158,7 +157,6 @@ aplicacion.post('/guardarUsuario', async (request, response) => {
     } catch (excepcion) {
         let mensajeError = 'No se han podido almacenar los datos: ';
         if (excepcion.errors) {
-            // Extrae los mensajes limpios que definiste en tu Schema
             const errores = Object.values(excepcion.errors).map(err => err.message);
             mensajeError += errores.join(' ');
         } else {
@@ -167,24 +165,25 @@ aplicacion.post('/guardarUsuario', async (request, response) => {
         
         response.status(400).json({ mensaje: mensajeError });
     }
+});
 
+// 2. Método GET para Listar Usuarios usando la agregación $lookup (Búsqueda Avanzada)
 aplicacion.get('/usuarios', async (request, response) => {
     try {
-        // Implementación de Pipeline de Agregación para asociar con "paises"
+        // Pipeline de Agregación para asociar con "paises"
         const usuariosConPais = await Usuario.aggregate([
             {
                 $lookup: {
-                    from: 'paises',           // Colección con la que unimos
-                    localField: 'nacionalidad', // Campo en "usuarios" (código ISO, ej: "CL")
-                    foreignField: 'iso2',      // Campo equivalente en "paises"
+                    from: 'paises',           
+                    localField: 'nacionalidad', 
+                    foreignField: 'iso2',      
                     as: 'datosNacionalidad'    
                 }
             },
             {
-                // Convierte el arreglo "datosNacionalidad" en un objeto directo para que sea limpio
                 $unwind: {
                     path: '$datosNacionalidad',
-                    preserveNullAndEmptyArrays: true // Muestra al usuario incluso si el país no existe
+                    preserveNullAndEmptyArrays: true 
                 }
             }
         ]);
@@ -196,5 +195,6 @@ aplicacion.get('/usuarios', async (request, response) => {
         response.status(200).json(usuariosConPais);
 
     } catch (error) {
-    response.status(500).json({ mensaje: `No ha sido posible obtener los datos: ${error.message}` });
-}
+        response.status(500).json({ mensaje: `No ha sido posible obtener los datos: ${error.message}` });
+    }
+});
