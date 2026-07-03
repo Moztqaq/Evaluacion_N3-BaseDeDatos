@@ -17,8 +17,8 @@ mongoose.connect('mongodb://localhost:27017/AP_N3_C1')
     .then(() => console.log('Conexión Exitosa!'))
     .catch((excepcion) => console.log('No ha sido posible conectarse por el siguiente error: ', excepcion));
 
-const port = process.env.port || 3000;
-aplicacion.listen(puerto, () => console.log(`Corriendo en el puerto ${port}`));
+const puerto = process.env.PORT || 3000;
+aplicacion.listen(puerto, () => console.log(`Corriendo en el puerto ${puerto}`));
 
 // ==========================================
 // ESQUEMAS Y MODELOS DE MONGOOSE
@@ -120,7 +120,7 @@ aplicacion.post('/guardarUsuario', async (request, response) => {
             fechaNacimiento, 
             nacionalidad, 
             genero, 
-            direccion, // Debe ser un objeto con: comuna, calle, numero, departamento
+            direccion, // objeto con: comuna, calle, numero, departamento
             contrasena 
         } = request.body;
 
@@ -131,7 +131,7 @@ aplicacion.post('/guardarUsuario', async (request, response) => {
             });
         }
 
-        // Encriptar la contraseña con Bcrypt (Requerimiento de Seguridad)
+        // Encriptar la contraseña con Bcrypt 
         const saltRounds = 10;
         const contrasenaEncriptada = await bcrypt.hash(contrasena, saltRounds);
 
@@ -148,7 +148,7 @@ aplicacion.post('/guardarUsuario', async (request, response) => {
             contrasena: contrasenaEncriptada
         });
 
-        // Guardar en la base de datos (Esto dispara automáticamente las validaciones del Schema)
+        
         await nuevoUsuario.save();
         
         response.status(200).json({ 
@@ -156,20 +156,18 @@ aplicacion.post('/guardarUsuario', async (request, response) => {
         });
 
     } catch (excepcion) {
-        // Capturar los errores de validación de Mongoose y devolverlos ordenados
         let mensajeError = 'No se han podido almacenar los datos: ';
         if (excepcion.errors) {
+            // Extrae los mensajes limpios que definiste en tu Schema
             const errores = Object.values(excepcion.errors).map(err => err.message);
             mensajeError += errores.join(' ');
         } else {
             mensajeError += excepcion.message;
         }
         
-        response.status(500).json({ mensaje: mensajeError });
+        response.status(400).json({ mensaje: mensajeError });
     }
-});
 
-// 2. Método GET para Listar Usuarios usando la agregación $lookup (Búsqueda Avanzada)
 aplicacion.get('/usuarios', async (request, response) => {
     try {
         // Implementación de Pipeline de Agregación para asociar con "paises"
@@ -179,7 +177,7 @@ aplicacion.get('/usuarios', async (request, response) => {
                     from: 'paises',           // Colección con la que unimos
                     localField: 'nacionalidad', // Campo en "usuarios" (código ISO, ej: "CL")
                     foreignField: 'iso2',      // Campo equivalente en "paises"
-                    as: 'datosNacionalidad'    // Nombre del arreglo donde se guardará el resultado
+                    as: 'datosNacionalidad'    
                 }
             },
             {
@@ -198,6 +196,5 @@ aplicacion.get('/usuarios', async (request, response) => {
         response.status(200).json(usuariosConPais);
 
     } catch (error) {
-        response.status(500).json({ mensaje: 'No ha sido posible obtener los datos: ', error });
-    }
-});
+    response.status(500).json({ mensaje: `No ha sido posible obtener los datos: ${error.message}` });
+}
