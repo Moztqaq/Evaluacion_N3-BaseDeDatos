@@ -103,6 +103,24 @@ const pais = new mongoose.Schema({
 });
 const Pais = mongoose.model('Pais', pais, 'paises');
 
+// NUEVO: Esquema para Dispositivo Electrónico (Asignado por Sistema)
+const dispositivoSchema = new mongoose.Schema({
+    usuario: { 
+        type: String, 
+        required: [true, 'El RUT del usuario es obligatorio para asociar el dispositivo.'] 
+    },
+    tipo: { type: String, required: [true, 'El tipo es obligatorio.'] },            
+    marca: { type: String, required: [true, 'La marca es obligatoria.'] },           
+    modelo: { type: String, required: [true, 'El modelo es obligatorio.'] },          
+    serie: { type: String },                           
+    fechaCompra: { type: Date },
+    garantiaMeses: { type: Number },                   
+    sistemaOperativo: { type: String },                
+    estado: { type: String, default: 'Activo' },       
+    valor: { type: Number }                            
+});
+const Dispositivo = mongoose.model('Dispositivo', dispositivoSchema, 'dispositivos');
+
 
 // ==========================================
 // MÉTODOS Y RUTAS DE LA API (Nivel 3)
@@ -123,18 +141,15 @@ aplicacion.post('/guardarUsuario', async (request, response) => {
             contrasena 
         } = request.body;
 
-        // Validar que venga la contraseña antes de encriptar
         if (!contrasena) {
             return response.status(400).json({ 
                 mensaje: 'No se han podido almacenar los datos: La contraseña es obligatoria.' 
             });
         }
 
-        // Encriptar la contraseña con Bcrypt (Requerimiento de Seguridad)
         const saltRounds = 10;
         const contrasenaEncriptada = await bcrypt.hash(contrasena, saltRounds);
 
-        // Crear la instancia del modelo con la estructura limpia
         const nuevoUsuario = new Usuario({
             nombre,
             rut,
@@ -147,7 +162,6 @@ aplicacion.post('/guardarUsuario', async (request, response) => {
             contrasena: contrasenaEncriptada
         });
 
-        // Guardar en la base de datos
         await nuevoUsuario.save();
         
         response.status(200).json({ 
@@ -162,17 +176,59 @@ aplicacion.post('/guardarUsuario', async (request, response) => {
         } else {
             mensajeError += excepcion.message;
         }
-        
         response.status(400).json({ mensaje: mensajeError });
     }
 });
 
-// 2. Método GET para Listar Usuarios usando la agregación $lookup (Búsqueda Avanzada)
+// NUEVO: Método POST para Crear/Guardar Dispositivo Electrónico
+aplicacion.post('/guardarDispositivo', async (request, response) => {
+    try {
+        const { usuario, tipo, marca, modelo, serie, fechaCompra, garantiaMeses, sistemaOperativo, estado, valor } = request.body;
+
+        const nuevoDispositivo = new Dispositivo({
+            usuario, // Aquí va el RUT del usuario dueño
+            tipo,
+            marca,
+            modelo,
+            serie,
+            fechaCompra,
+            garantiaMeses,
+            sistemaOperativo,
+            estado,
+            valor
+        });
+
+        await nuevoDispositivo.save();
+        response.status(200).json({ mensaje: 'Datos almacenados correctamente.' });
+
+    } catch (excepcion) {
+        let mensajeError = 'No se han podido almacenar los datos: ';
+        if (excepcion.errors) {
+            const errores = Object.values(excepcion.errors).map(err => err.message);
+            mensajeError += errores.join(' ');
+        } else {
+            mensajeError += excepcion.message;
+        }
+        response.status(400).json({ mensaje: mensajeError });
+    }
+});
+
+// 2. Método GET para Listar Usuarios usando la agregación $lookup (Une con Dispositivos y Países)
 aplicacion.get('/usuarios', async (request, response) => {
     try {
-        // Pipeline de Agregación para asociar con "paises"
-        const usuariosConPais = await Usuario.aggregate([
+        // Pipeline de Agregación
+        const usuariosCompletos = await Usuario.aggregate([
             {
+                // UNIÓN 1: Trae los dispositivos electrónicos usando el RUT como puente
+                $lookup: {
+                    from: 'dispositivos',       // Colección destino
+                    localField: 'rut',          // Campo clave en 'usuarios'
+                    foreignField: 'usuario',    // Campo equivalente en 'dispositivos' (RUT)
+                    as: 'misDispositivos'       // Nombre del campo array resultante
+                }
+            },
+            {
+                // UNIÓN 2: Trae los datos del país basándose en el código ISO de nacionalidad
                 $lookup: {
                     from: 'paises',           
                     localField: 'nacionalidad', 
@@ -188,11 +244,11 @@ aplicacion.get('/usuarios', async (request, response) => {
             }
         ]);
 
-        if (!usuariosConPais || usuariosConPais.length === 0) {
+        if (!usuariosCompletos || usuariosCompletos.length === 0) {
             return response.status(404).json({ mensaje: 'No se encontraron usuarios registrados.' });
         }
 
-        response.status(200).json(usuariosConPais);
+        response.status(200).json(usuariosCompletos);
 
     } catch (error) {
         response.status(500).json({ mensaje: `No ha sido posible obtener los datos: ${error.message}` });
